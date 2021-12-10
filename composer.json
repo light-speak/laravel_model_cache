@@ -1,17 +1,22 @@
 {
     "name": "linty/laravel_model_cache",
+    "type": "library",
     "description": "一个缓存",
+    "homepage": "https://github.com/light-speak/laravel_model_cache",
     "license": "MIT",
     "autoload": {
         "psr-4": {
             "Linty\\LaravelModelCache\\": "src/"
         }
     },
+
     "authors": [
         {
             "name": "linty",
             "email": "linty@lintyone.cn"
         }
     ],
-    "require": {}
+    "require": {
+        "php": ">=7.1.0"
+    }
 }
