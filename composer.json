@@ -1,0 +1,17 @@
+{
+    "name": "linty/laravel_model_cache",
+    "description": "一个缓存",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Linty\\LaravelModelCache\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "linty",
+            "email": "linty@lintyone.cn"
+        }
+    ],
+    "require": {}
+}
