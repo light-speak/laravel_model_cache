@@ -3,7 +3,6 @@
 namespace LightSpeak\ModelCache;
 
 use Cache;
-use Psr\SimpleCache\InvalidArgumentException;
 
 /**
  * @template T
