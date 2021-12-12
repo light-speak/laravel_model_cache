@@ -42,7 +42,7 @@ class SaveCacheJob implements ShouldQueue
             ->where('id', $this->id)
             ->first();
         foreach ($model->getAttributes() as $key => $v) {
-            $cache_key = CacheModel::getStaticCacheKey($key, $this->className, $this->id);
+            $cache_key = ModelCache::getStaticCacheKey($key, $this->className, $this->id);
             if (Cache::has($cache_key)) {
                 $value = Cache::get($cache_key);
                 $model->{$key} = $value;

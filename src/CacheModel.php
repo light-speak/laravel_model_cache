@@ -67,17 +67,17 @@ class CacheModel extends Model
             return $this->tmpAttributes[$key];
         }
         return Cache::rememberForever($this->getCacheKey($key), function () use ($key) {
-            SaveCacheJob::dispatch($this->className, $this->attributes['id'])->delay(now()->addMinutes(10));
+            SaveCacheJob::dispatch($this->className, $this->attributes['id'])->delay(now()->addSeconds(10));
             try {
                 $value = $this->getAttribute($key);
             } catch (Exception $e) {
                 throw new Exception("你这称(指字段名称: $key)有问题啊");
             }
-            throw_if($value == null, new Exception('你这称(指字段名称)有问题啊'));
+//            throw_if($value == null, new Exception("你这称(指字段名称: $key)有问题啊"));
             if ($this->currentVersions != ModelCache::$versions[$this->getCacheKey()]) {
                 $value = (new $this->className)->query()->where('id', $this->attributes['id'])->first()->{$key};
             }
-            return $value;
+            return $value ?? '';
         });
     }
 
