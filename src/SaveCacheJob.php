@@ -50,6 +50,7 @@ class SaveCacheJob implements ShouldQueue
             }
         }
         $model->save();
+        Cache::delete(ModelCache::getStaticCacheKey($this->className, $this->id));
     }
 
     public function middleware(): array

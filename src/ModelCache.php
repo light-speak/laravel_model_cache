@@ -3,6 +3,7 @@
 namespace LightSpeak\ModelCache;
 
 use Cache;
+use Psr\SimpleCache\InvalidArgumentException;
 
 /**
  * @template T
@@ -18,6 +19,7 @@ class ModelCache
      * @param bool   $useTransaction 是否开启事务
      *
      * @return CacheModel
+     * @throws InvalidArgumentException
      */
     public static function make($model, string $className, bool $useTransaction = false): CacheModel
     {
