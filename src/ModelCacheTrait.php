@@ -10,7 +10,6 @@ trait ModelCacheTrait
      * @param bool $useTransaction 是否使用事务，使用的话必须调用saveCache方法才可保存
      *
      * @return mixed
-     * @throws InvalidArgumentException
      */
     public function cache(bool $useTransaction = false)
     {

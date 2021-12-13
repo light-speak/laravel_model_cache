@@ -77,26 +77,35 @@ class CacheModel extends Model
         $this->attributes = $attributes;
         foreach ($attributes as $key => $value) {
             if (Cache::has($this->getCacheKey($key))) {
-                debug('初始化Attribute时存在Key: ' . $key);
                 $this->attributes[$key] = $this->getAttributeCache($key);
             }
         }
         $this->instance->attributes = $this->attributes;
     }
 
+    /**
+     * @throws Exception
+     */
     public function getAttributeCache(string $key)
     {
-        $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key) {
+        try {
+            $value = $this->attributes[$key];
+        } catch (Exception $e) {
+            throw new Exception("你这称(指字段名称: $key)有问题啊");
+        }
+        if ($key == 'id') {
+            // ID 存个啥， ID不存
+            return $value;
+        }
+        if (!is_numeric($value) && $this->useTransaction) {
+            throw new Exception("十五斤，三十块，你这称(指字段名称: $key)有问题啊，吸铁石（如果开启事务 又不是数值型，那不扯犊子了吗）");
+        }
+        $value = Cache::remember($this->getCacheKey($key), 600, function () use ($key) {
             if (!Cache::has($this->getCacheKey())) {
-                SaveCacheJob::dispatch($this->className, $this->attributes['id'])->delay(now()->addMinutes(10));
+                SaveCacheJob::dispatch($this->className, $this->attributes['id'])->delay(now()->addMinutes(5));
                 Cache::put($this->getCacheKey(), 'wait');
             }
-            try {
-                $value = $this->getAttribute($key);
-            } catch (Exception $e) {
-                throw new Exception("你这称(指字段名称: $key)有问题啊");
-            }
-
+            $value = $this->attributes[$key];
 
             if ($this->currentVersion != ModelCache::$versions[$this->getCacheKey()]) {
                 $newest = (new $this->className)->query()->where('id', $this->attributes['id'])->first();
@@ -152,6 +161,7 @@ class CacheModel extends Model
      * @param $value
      *
      * @throws InvalidArgumentException
+     * @throws Exception
      */
     public function __set($key, $value)
     {

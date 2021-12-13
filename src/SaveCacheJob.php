@@ -38,15 +38,17 @@ class SaveCacheJob implements ShouldQueue
     {
         $model = (new $this->className)
             ->query()
-            ->lockForUpdate()
             ->where('id', $this->id)
             ->first();
+        if (!$model) {
+            Cache::delete(ModelCache::getStaticCacheKey($this->className, $this->id));
+            return;
+        }
         foreach ($model->getAttributes() as $key => $v) {
             $cache_key = ModelCache::getStaticCacheKey($key, $this->className, $this->id);
             if (Cache::has($cache_key)) {
-                $value = Cache::get($cache_key);
+                $value = Cache::pull($cache_key);
                 $model->{$key} = $value;
-                Cache::delete($cache_key);// 这里先删了，不影响其他地方获取
             }
         }
         $model->save();

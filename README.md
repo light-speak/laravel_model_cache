@@ -33,7 +33,7 @@ composer require linty/laravel_model_cache
 
 ## 详细使用
 
-### 修改数据，并使用Redis代理
+### 修改数据，并使用插件进行模型代理
 
 ```injectablephp
     $wallet = Wallet::query()->first()->cache();
