@@ -45,13 +45,16 @@ class SaveCacheJob implements ShouldQueue
             return;
         }
         foreach ($model->getAttributes() as $key => $v) {
-            $cache_key = ModelCache::getStaticCacheKey($key, $this->className, $this->id);
+            $cache_key = ModelCache::getStaticCacheKey($this->className, $this->id, $key);
+            debug($cache_key);
             if (Cache::has($cache_key)) {
                 $value = Cache::pull($cache_key);
                 $model->{$key} = $value;
+                info("Save: {$this->className}:$this->id:$key:$value");
             }
         }
         $model->save();
+
         Cache::delete(ModelCache::getStaticCacheKey($this->className, $this->id));
     }
 

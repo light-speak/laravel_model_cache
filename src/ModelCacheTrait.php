@@ -2,7 +2,9 @@
 
 namespace LightSpeak\ModelCache;
 
+use Cache;
 use Psr\SimpleCache\InvalidArgumentException;
+use Str;
 
 trait ModelCacheTrait
 {
@@ -30,5 +32,19 @@ trait ModelCacheTrait
             }
         }
         return $this->getAttributes()[$key];
+    }
+
+    public static function boot()
+    {
+        self::saved(function ($model) {
+            // change version uuid to notify else instance when saved
+            ModelCache::$versions[ModelCache::getStaticCacheKey(__CLASS__, $model->id)] = Str::uuid();
+            if (isset($model->changes) && is_array($model->changes)) {
+                foreach ($model->changes as $key => $value) {
+                    Cache::delete(ModelCache::getStaticCacheKey(__CLASS__, $model->id, $key));
+                }
+            }
+        });
+        static::bootTraits();
     }
 }

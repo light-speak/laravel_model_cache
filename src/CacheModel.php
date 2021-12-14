@@ -35,7 +35,7 @@ class CacheModel extends Model
     protected $currentVersion;
 
     /**
-     * @throws InvalidArgumentException
+     * @throws Exception
      */
     public function __construct($model, string $className, bool $useTransaction = false)
     {
@@ -49,15 +49,9 @@ class CacheModel extends Model
     }
 
 
-    /**
-     * @throws InvalidArgumentException
-     */
     public function updateVersion()
     {
         if (!array_key_exists($this->getCacheKey(), ModelCache::$versions)) {
-            foreach ($this->instance->attributes as $key => $value) {
-                Cache::delete($this->getCacheKey($key));
-            }
             $versionUUID = Str::uuid();
             ModelCache::$versions[$this->getCacheKey()] = $versionUUID;
             $this->currentVersion = $versionUUID;
@@ -69,9 +63,12 @@ class CacheModel extends Model
 
     public function getCacheKey(string $key = ''): string
     {
-        return "{$this->className}:{$this->instance->attributes['id']}:$key";
+        return "$this->className:{$this->instance->attributes['id']}:$key";
     }
 
+    /**
+     * @throws Exception
+     */
     protected function getAttributesCache(array $attributes)
     {
         $this->attributes = $attributes;
@@ -88,17 +85,12 @@ class CacheModel extends Model
      */
     public function getAttributeCache(string $key)
     {
-        try {
-            $value = $this->attributes[$key];
-        } catch (Exception $e) {
-            throw new Exception("你这称(指字段名称: $key)有问题啊");
+        if (!isset($this->attributes[$key])) {
+            // 如果没有这个key，可能是刚创建的，直接给初值
+            $this->attributes[$key] = '0';
         }
         if ($key == 'id') {
-            // ID 存个啥， ID不存
-            return $value;
-        }
-        if (!is_numeric($value) && $this->useTransaction) {
-            throw new Exception("十五斤，三十块，你这称(指字段名称: $key)有问题啊，吸铁石（如果开启事务 又不是数值型，那不扯犊子了吗）");
+            return $this->attributes[$key];
         }
         $value = Cache::remember($this->getCacheKey($key), 600, function () use ($key) {
             if (!Cache::has($this->getCacheKey())) {
@@ -109,9 +101,10 @@ class CacheModel extends Model
 
             if ($this->currentVersion != ModelCache::$versions[$this->getCacheKey()]) {
                 $newest = (new $this->className)->query()->where('id', $this->attributes['id'])->first();
-                $this->getAttributesCache($newest->attributes);
-                $this->currentVersion = ModelCache::$versions[$this->getCacheKey()];
                 $value = $newest->{$key};
+
+                $this->currentVersion = ModelCache::$versions[$this->getCacheKey()];
+                $this->getAttributesCache($newest->attributes);
             }
             return $value ?? 0;
         });
@@ -136,6 +129,9 @@ class CacheModel extends Model
         $this->instance->save();
     }
 
+    /**
+     * @throws Exception
+     */
     public function saveCache()
     {
         foreach ($this->changes as $key) {
@@ -160,12 +156,10 @@ class CacheModel extends Model
      * @param $key
      * @param $value
      *
-     * @throws InvalidArgumentException
      * @throws Exception
      */
     public function __set($key, $value)
     {
-        self::bindListener($this->className);
         $key = (string)Str::of($key)->replace('_cache', '');
         // 先读一遍值，防止emo
         $this->getAttributeCache($key);
@@ -179,28 +173,6 @@ class CacheModel extends Model
         $this->instance->{$key} = $value;
         $this->attributes = $this->instance->attributes;
     }
-
-    /**
-     * @param string $className
-     *
-     * @throws InvalidArgumentException
-     */
-    protected static function bindListener(string $className)
-    {
-        if (!array_key_exists($className, self::$modelListeners)) {
-            self::$modelListeners[$className] = true;
-            (new $className)->saved(function ($model) use ($className) {
-                // change version uuid to notify else instance when saved
-                ModelCache::$versions[ModelCache::getStaticCacheKey($className, $model->id)] = Str::uuid();
-                if (isset($model->changes) && is_array($model->changes)) {
-                    foreach ($model->changes as $key => $value) {
-                        Cache::delete(ModelCache::getStaticCacheKey($className, $model->id, $key));
-                    }
-                }
-            });
-        }
-    }
-
 }
 
 
