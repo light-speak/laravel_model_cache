@@ -3,15 +3,13 @@
 namespace LightSpeak\ModelCache;
 
 use Cache;
-use Psr\SimpleCache\InvalidArgumentException;
-use Str;
 
 trait ModelCacheTrait
 {
     /**
      * @param bool $useTransaction 是否使用事务，使用的话必须调用saveCache方法才可保存
      *
-     * @return mixed
+     * @return mixed|CacheModel
      */
     public function cache(bool $useTransaction = false)
     {
@@ -31,20 +29,20 @@ trait ModelCacheTrait
                 return $cache_value;
             }
         }
-        return $this->getAttributes()[$key];
+        return $this->getAttributes()[$key] ?? null;
     }
 
     public static function boot()
     {
         self::saved(function ($model) {
             // change version uuid to notify else instance when saved
-            ModelCache::$versions[ModelCache::getStaticCacheKey(__CLASS__, $model->id)] = Str::uuid();
-            if (isset($model->changes) && is_array($model->changes)) {
-                foreach ($model->changes as $key => $value) {
-                    Cache::delete(ModelCache::getStaticCacheKey(__CLASS__, $model->id, $key));
-                }
+            foreach ($model->changes as $key => $value) {
+                Cache::delete(ModelCache::getStaticCacheKey(__CLASS__, $model->id, $key));
             }
+
         });
         static::bootTraits();
     }
+
+
 }

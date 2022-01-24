@@ -3,7 +3,6 @@
 namespace LightSpeak\ModelCache;
 
 use Cache;
-use Psr\SimpleCache\InvalidArgumentException;
 
 /**
  * @template T
@@ -11,15 +10,12 @@ use Psr\SimpleCache\InvalidArgumentException;
 class ModelCache
 {
 
-    public static $versions = [];
-
     /**
      * @param T      $model
      * @param string $className      类名
      * @param bool   $useTransaction 是否开启事务
      *
      * @return CacheModel
-     * @throws InvalidArgumentException
      */
     public static function make($model, string $className, bool $useTransaction = false): CacheModel
     {
@@ -45,13 +41,13 @@ class ModelCache
      * @param string $className
      * @param        $id
      *
-     * @return mixed|null
+     * @return float|int|null
      */
     public static function getStaticAttributeCache(string $key, string $className, $id)
     {
         $cacheKey = self::getStaticCacheKey($className, $id, $key);
         if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
+            return Cache::get($cacheKey) / 100;
         } else {
             return null;
         }

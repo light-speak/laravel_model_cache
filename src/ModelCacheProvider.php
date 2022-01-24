@@ -13,8 +13,6 @@ class ModelCacheProvider extends ServiceProvider
 
     public function register()
     {
-//        $this->app->singleton('model_cache', function ($app) {
-//            return new ModelCache();
-//        });
+
     }
 }

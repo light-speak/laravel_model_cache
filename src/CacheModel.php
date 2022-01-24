@@ -5,14 +5,11 @@ namespace LightSpeak\ModelCache;
 use Cache;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
-use Psr\SimpleCache\InvalidArgumentException;
 use Str;
 use Throwable;
 
 class CacheModel extends Model
 {
-    protected $guarded = [];
-    protected $changes = [];
     /**
      * 只保存和原值的差值，原值取Attributes里的值
      * 当开启事务后，需手动保存，才能应用更改
@@ -34,99 +31,80 @@ class CacheModel extends Model
      */
     protected $currentVersion;
 
-    /**
-     * @throws Exception
-     */
     public function __construct($model, string $className, bool $useTransaction = false)
     {
         $this->instance = $model;
         $this->className = $className;
         $this->useTransaction = $useTransaction;
         $this->updateVersion();
-        $this->getAttributesCache($model->attributes);
 
-        parent::__construct($this->attributes);
+        parent::__construct();
     }
 
 
     public function updateVersion()
     {
-        if (!array_key_exists($this->getCacheKey(), ModelCache::$versions)) {
+        if (!Cache::has("{$this->getCacheKey()}:cache_version")) {
             $versionUUID = Str::uuid();
-            ModelCache::$versions[$this->getCacheKey()] = $versionUUID;
+            Cache::put("{$this->getCacheKey()}:cache_version", $versionUUID);
             $this->currentVersion = $versionUUID;
         } else {
-            $this->currentVersion = ModelCache::$versions[$this->getCacheKey()];
+            $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
         }
     }
-
 
     public function getCacheKey(string $key = ''): string
     {
-        return "$this->className:{$this->instance->attributes['id']}:$key";
+        return "$this->className:{$this->instance->id}:$key";
     }
 
-    /**
-     * @throws Exception
-     */
-    protected function getAttributesCache(array $attributes)
+    public function getAttributeCache(string $key): int
     {
-        $this->attributes = $attributes;
-        foreach ($attributes as $key => $value) {
-            if (Cache::has($this->getCacheKey($key))) {
-                $this->attributes[$key] = $this->getAttributeCache($key);
-            }
-        }
-        $this->instance->attributes = $this->attributes;
-    }
-
-    /**
-     * @throws Exception
-     */
-    public function getAttributeCache(string $key)
-    {
-        if (!isset($this->attributes[$key])) {
-            // 如果没有这个key，可能是刚创建的，直接给初值
-            $this->attributes[$key] = '0';
-        }
+        // 又不需要存，又不存在key的情况下就这样返回就行
         if ($key == 'id') {
-            return $this->attributes[$key];
+            return $this->instance->{$key};
         }
-        $value = Cache::remember($this->getCacheKey($key), 600, function () use ($key) {
-            if (!Cache::has($this->getCacheKey())) {
-                SaveCacheJob::dispatch($this->className, $this->attributes['id'])->delay(now()->addMinutes(5));
-                Cache::put($this->getCacheKey(), 'wait');
-            }
-            $value = $this->attributes[$key];
+        $lock = Cache::lock("save_model_lock:{$this->getCacheKey()}");
+//        info("{$this->getCacheKey($key)}等待锁");
+        return $lock->block(5, function () use ($key) {
+//            info("{$this->getCacheKey($key)}得到锁");
+            $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key) {
+                if (!Cache::has($this->getCacheKey())) {
+                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+                    Cache::put($this->getCacheKey(), 'wait');
+                }
+                $value = $this->instance->{$key};
 
-            if ($this->currentVersion != ModelCache::$versions[$this->getCacheKey()]) {
-                $newest = (new $this->className)->query()->where('id', $this->attributes['id'])->first();
-                $value = $newest->{$key};
+                if (Cache::get("{$this->getCacheKey()}:cache_version") != $this->currentVersion) {
+                    $newest = (new $this->className)
+                        ->query()
+                        ->findOrFail($this->instance->id);
+                    $value = $newest->{$key};
+                    $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
+                }
+                return intval(($value ?? 0) * 100); // 百倍存放，不要小数
+            });
+//            if ($key == 'group_performance_buy_again') {
+//                info($key);
+//                info($this->getCacheKey($key));
+//                info(Cache::get($this->getCacheKey($key)));
+//            }
 
-                $this->currentVersion = ModelCache::$versions[$this->getCacheKey()];
-                $this->getAttributesCache($newest->attributes);
+            // 如果当前是在事务模式且修改过值, 则返回两个的合
+            if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {
+                return $this->tmpAttributes[$key] + $value;
+            } else {
+                return $value;
             }
-            return $value ?? 0;
         });
-
-        // 如果当前是在事务模式且修改过值, 则返回两个的合
-        if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {
-            return $this->tmpAttributes[$key] + $value;
-        } else {
-            return $value;
-        }
     }
 
     /**
      * @throws Exception
-     * @throws InvalidArgumentException
      */
     public function save(array $options = [])
     {
-        foreach ($this->changes as $key) {
-            Cache::delete($this->getCacheKey($key));
-        }
-        $this->instance->save();
+        throw new Exception('这玩意不给save了');
     }
 
     /**
@@ -134,8 +112,8 @@ class CacheModel extends Model
      */
     public function saveCache()
     {
-        foreach ($this->changes as $key) {
-            Cache::put($this->getCacheKey($key), $this->getAttributeCache($key));
+        foreach ($this->tmpAttributes as $key => $value) {
+            Cache::increment($this->getCacheKey($key), $value);
         }
         $this->tmpAttributes = [];
     }
@@ -148,8 +126,12 @@ class CacheModel extends Model
      */
     public function __get($key)
     {
-        $key = Str::of($key)->replace('_cache', '');
-        return $this->getAttributeCache($key);
+        if (!is_numeric($this->instance->$key) || $key == 'id') {
+            return $this->instance->$key;
+        }
+        $v = $this->getAttributeCache($key);
+//        info("{$this->getCacheKey($key)} 数据值: $v");
+        return (float)$v / 100;
     }
 
     /**
@@ -160,19 +142,43 @@ class CacheModel extends Model
      */
     public function __set($key, $value)
     {
-        $key = (string)Str::of($key)->replace('_cache', '');
-        // 先读一遍值，防止emo
-        $this->getAttributeCache($key);
-
-        $this->changes[] = $key;
-        if (!$this->useTransaction) {
-            Cache::put($this->getCacheKey($key), $value);
-        } else {
-            $this->tmpAttributes[$key] = $value - $this->attributes[$key]; // 存差值
-        }
-        $this->instance->{$key} = $value;
-        $this->attributes = $this->instance->attributes;
+        throw new Exception('这玩意不给set了');
     }
+
+    /**
+     * @throws Exception
+     */
+    public function incrementByCache(string $key, $value)
+    {
+        $v = $this->getAttributeCache($key);
+        $realValue = intval(round($value * 100));
+        if (!$this->useTransaction) {
+            $v = Cache::increment($this->getCacheKey($key), $realValue);
+            info("{$this->getCacheKey($key)} : $v =>  增加数量 $realValue => 结果 $v");
+        } else {
+            $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) + $realValue;
+        }
+    }
+
+    /**
+     * @throws Exception
+     */
+    public function decrementByCache(string $key, $value)
+    {
+        $v = $this->getAttributeCache($key);
+        if ($v <= 0) { // 脏数据不能减
+            $value = Cache::pull($key);
+            $v = $this->getAttributeCache($key);
+        }
+        $realValue = intval(round($value * 100));
+        if (!$this->useTransaction) {
+            $v = Cache::decrement($this->getCacheKey($key), $realValue);
+            info("{$this->getCacheKey($key)} : $v => 减少数量 $realValue => 结果 $v");
+        } else {
+            $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
+        }
+    }
+
 }
 
 
