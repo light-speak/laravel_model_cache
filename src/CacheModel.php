@@ -165,17 +165,15 @@ class CacheModel extends Model
      */
     public function decrementByCache(string $key, $value)
     {
-        $v = $this->getAttributeCache($key);
-        if ($v <= 0) { // 脏数据不能减
-            $value = Cache::pull($key);
-            $v = $this->getAttributeCache($key);
-        }
+        $value = $this->getAttributeCache($key);
         $realValue = intval(round($value * 100));
         if (!$this->useTransaction) {
             $v = Cache::decrement($this->getCacheKey($key), $realValue);
             info("{$this->getCacheKey($key)} : $v => 减少数量 $realValue => 结果 $v");
         } else {
-            $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
+            $v = $this->tmpAttributes[$key] ?? $value;
+            $this->tmpAttributes[$key] = $v - $realValue;
+            info("{$this->getCacheKey($key)} : $value => 减少数量 $realValue => 结果 $this->tmpAttributes[$key]");
         }
     }
 
