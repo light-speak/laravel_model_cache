@@ -2,7 +2,7 @@
 
 namespace LightSpeak\ModelCache;
 
-use Cache;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * @template T

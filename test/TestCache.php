@@ -1,6 +1,7 @@
 <?php
 
-use Tests\TestCase;
+
+use Monolog\Test\TestCase;
 
 class TestCache extends TestCase
 {

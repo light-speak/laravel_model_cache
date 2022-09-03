@@ -2,15 +2,14 @@
 
 namespace LightSpeak\ModelCache;
 
-use Cache;
-use Eloquent;
-use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Eloquent\Model;
-use Str;
+use Exception;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * @mixin Eloquent
+ * @mixin Model
  */
 class CacheModel extends Model
 {
@@ -87,11 +86,6 @@ class CacheModel extends Model
                 }
                 return intval(($value ?? 0) * 100); // 百倍存放，不要小数
             });
-//            if ($key == 'group_performance_buy_again') {
-//                info($key);
-//                info($this->getCacheKey($key));
-//                info(Cache::get($this->getCacheKey($key)));
-//            }
 
             // 如果当前是在事务模式且修改过值, 则返回两个的合
             if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {

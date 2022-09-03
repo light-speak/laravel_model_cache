@@ -6,10 +6,9 @@
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Linty\\LaravelModelCache\\": "src/"
+            "LightSpeak\\ModelCache\\": "src/"
         }
     },
-
     "authors": [
         {
             "name": "linty",
@@ -17,6 +16,7 @@
         }
     ],
     "require": {
-        "php": ">=7.1.0"
+        "php": ">=7.1.0",
+        "laravel/framework": "^9"
     }
 }
