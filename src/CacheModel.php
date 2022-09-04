@@ -156,9 +156,10 @@ class CacheModel extends Model
             Cache::increment($this->getCacheKey($key), $value);
         }
         $this->tmpAttributes = [];
-        if (!Cache::has($this->getCacheKey())) {
+        $modelKey = $this->getCacheKey();
+        if (!Cache::has("$modelKey:short")) {
             SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
-            Cache::put($this->getCacheKey(), 'wait');
+            Cache::put("$modelKey:short", 'wait');
         }
     }
 
