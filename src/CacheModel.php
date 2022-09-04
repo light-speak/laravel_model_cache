@@ -173,9 +173,11 @@ class CacheModel extends Model
     }
 
     /**
-     * @throws Exception
+     * @param string $key
+     * @param $value
+     * @return void
      */
-    public function incrementByCache(string $key, $value)
+    public function incrementByCache(string $key, $value): void
     {
         $this->getAttributeCache($key);
         $realValue = intval(round($value * 1000));
@@ -192,9 +194,11 @@ class CacheModel extends Model
     }
 
     /**
-     * @throws Exception
+     * @param string $key
+     * @param $value
+     * @return void
      */
-    public function decrementByCache(string $key, $value)
+    public function decrementByCache(string $key, $value): void
     {
         $this->getAttributeCache($key);
 

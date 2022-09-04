@@ -1,22 +1,22 @@
 {
-    "name": "linty/laravel_model_cache",
-    "type": "library",
-    "description": "基于Redis的laravel模型数值缓存，可以减少并发修改对数据库的压力，减少数据库事务锁的使用",
-    "homepage": "https://github.com/light-speak/laravel_model_cache",
-    "license": "MIT",
-    "autoload": {
-        "psr-4": {
-            "LightSpeak\\ModelCache\\": "src/"
-        }
-    },
-    "authors": [
-        {
-            "name": "light-speak",
-            "email": "guangyu@light-speak.com"
-        }
-    ],
-    "require": {
-        "php": ">=7.1.0",
-        "laravel/framework": "^9"
+  "name": "light-speak/laravel_model_cache",
+  "type": "library",
+  "description": "基于Redis的laravel模型数值缓存，可以减少并发修改对数据库的压力，减少数据库事务锁的使用",
+  "homepage": "https://github.com/light-speak/laravel_model_cache",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "LightSpeak\\ModelCache\\": "src/"
     }
+  },
+  "authors": [
+    {
+      "name": "light-speak",
+      "email": "guangyu@light-speak.com"
+    }
+  ],
+  "require": {
+    "php": ">=8.0",
+    "laravel/framework": "^9"
+  }
 }
