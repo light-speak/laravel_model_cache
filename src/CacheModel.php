@@ -14,37 +14,54 @@ use Throwable;
 class CacheModel extends Model
 {
     /**
+     * If useTransaction = True
+     *
+     * Only save the difference from the original value, the original value takes the value in Attributes
+     * When the transaction is opened, it needs to be saved manually before the changes can be applied
+     * Save with the difference value when saving, do not refer to the original value of Attribute
+     *
      * 只保存和原值的差值，原值取Attributes里的值
      * 当开启事务后，需手动保存，才能应用更改
      * 保存时以差值进行保存，不参考Attribute原值
      *
      * @var array
      */
-    protected $tmpAttributes = [];
-    protected $useTransaction;
+    protected array $tmpAttributes = [];
+    protected bool  $useTransaction;
 
-    protected $className;
-    protected $instance;
+    protected string $className;
+    protected mixed  $instance;
 
     /**
-     * 用于校验当前代理的实例是否是最新版本
-     * 只有原模型修改了，这个版本才会不对
+     * Used to verify whether the current proxy instance is the latest version
+     * This version will be wrong only if the original model is modified
+     *
+     * 判断当前代理模型是否是最新数据版本
+     * 如果该模型被修改过，则版本不会一致，会自动更新数值
+     *
      * @var string
      */
-    protected $currentVersion;
+    protected string $currentVersion;
 
-    public function __construct($model, string $className, bool $useTransaction = false)
+    public function __construct(mixed $model, string $className, bool $useTransaction = false)
     {
         $this->instance = $model;
         $this->className = $className;
         $this->useTransaction = $useTransaction;
-        $this->updateVersion();
+        $this->syncVersion();
 
         parent::__construct();
     }
 
 
-    public function updateVersion()
+    /**
+     * Sync current model version
+     *
+     * 同步当前模型的版本
+     *
+     * @return void
+     */
+    public function syncVersion(): void
     {
         if (!Cache::has("{$this->getCacheKey()}:cache_version")) {
             $versionUUID = Str::uuid();
@@ -55,25 +72,41 @@ class CacheModel extends Model
         }
     }
 
+    /**
+     * Get the unique key, if the key is an empty string or null, it can represent a model, otherwise it represents a field
+     *
+     * 获取一个唯一Key，$key为空或者空字符时，用于代表Model，$key为字段名称则代表字段
+     *
+     * @param string $key
+     * @return string
+     */
     public function getCacheKey(string $key = ''): string
     {
-        return "$this->className:{$this->instance->id}:$key";
+        return ModelCache::getStaticCacheKey($this->className, $this->instance->id, $key);
     }
 
+    /**
+     * 使用一个KEY: ModelKey:long VALUE:wait 的值来判断是否存在长时间缓存
+     * 使用一个KEY: ModelKey:short VALUE:wait 的值来判断是否存在短时间缓存
+     * 存在值修改会同时删除这两个值
+     * 不修改数值的情况下，存在时间为3到24小时
+     * 修改数值会在15秒后进行数据更新
+     *
+     * @param string $key
+     * @return int
+     */
     public function getAttributeCache(string $key): int
     {
-        // 又不需要存，又不存在key的情况下就这样返回就行
         if ($key == 'id') {
             return $this->instance->{$key};
         }
-        $lock = Cache::lock("save_model_lock:{$this->getCacheKey()}");
-//        info("{$this->getCacheKey($key)}等待锁");
-        return $lock->block(10, function () use ($key) {
-//            info("{$this->getCacheKey($key)}得到锁");
-            $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key) {
-                if (!Cache::has($this->getCacheKey())) {
-                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
-                    Cache::put($this->getCacheKey(), 'wait');
+        $modelKey = $this->getCacheKey();
+        $lock = Cache::lock("save_model_lock:$modelKey");
+        return $lock->block(10, function () use ($key, $modelKey) {
+            $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
+                if (!Cache::has("$modelKey:long")) {
+                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(mt_rand(3, 24)));
+                    Cache::put("$modelKey:long", 'wait');
                 }
                 $value = $this->instance->{$key};
 
@@ -84,7 +117,7 @@ class CacheModel extends Model
                     $value = $newest->{$key};
                     $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
                 }
-                return intval(($value ?? 0) * 100); // 百倍存放，不要小数
+                return intval(($value ?? 0) * 1000); // Store in a thousand times the value
             });
 
             // 如果当前是在事务模式且修改过值, 则返回两个的合
@@ -96,31 +129,34 @@ class CacheModel extends Model
         });
     }
 
-    /**
-     * @throws Exception
-     */
-    public function save(array $options = [])
+    public function save(array $options = []): void
     {
-        throw new Exception('这玩意不给save了');
     }
 
     /**
+     * If using a transaction, use this method to save
+     *
+     * 如果使用事务，需要用该方法进行保存
+     *
      * @throws Exception
      */
     public function saveCache()
     {
         foreach ($this->tmpAttributes as $key => $value) {
-            $this->getAttributeCache($key);  // 避免缓存里没有值
-            $v = Cache::increment($this->getCacheKey($key), $value);
-            info("key: {$this->getCacheKey($key)} value : {$value}, 结果: {$v}");
+            $this->getAttributeCache($key);  // Avoid having no value in the cache and update the cached version
+            Cache::increment($this->getCacheKey($key), $value);
         }
         $this->tmpAttributes = [];
+        if (!Cache::has($this->getCacheKey())) {
+            SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+            Cache::put($this->getCacheKey(), 'wait');
+        }
     }
 
     /**
      * @param $key
      *
-     * @return mixed
+     * @return float
      * @throws Throwable
      */
     public function __get($key)
@@ -129,19 +165,11 @@ class CacheModel extends Model
             return $this->instance->$key;
         }
         $v = $this->getAttributeCache($key);
-//        info("{$this->getCacheKey($key)} 数据值: $v");
-        return (float)$v / 100;
+        return (float)$v / 1000;
     }
 
-    /**
-     * @param $key
-     * @param $value
-     *
-     * @throws Exception
-     */
     public function __set($key, $value)
     {
-        throw new Exception('这玩意不给set了');
     }
 
     /**
@@ -149,11 +177,15 @@ class CacheModel extends Model
      */
     public function incrementByCache(string $key, $value)
     {
-        $v = $this->getAttributeCache($key);
-        $realValue = intval(round($value * 100));
+        $this->getAttributeCache($key);
+        $realValue = intval(round($value * 1000));
         if (!$this->useTransaction) {
-            $v = Cache::increment($this->getCacheKey($key), $realValue);
-//            info("{$this->getCacheKey($key)} : $v =>  增加数量 $realValue => 结果 $v");
+            Cache::increment($this->getCacheKey($key), $realValue);
+            $modelKey = $this->getCacheKey();
+            if (!Cache::has("$modelKey:short")) {
+                SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+                Cache::put("$modelKey:short", 'wait');
+            }
         } else {
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) + $realValue;
         }
@@ -164,15 +196,18 @@ class CacheModel extends Model
      */
     public function decrementByCache(string $key, $value)
     {
-        $v = $this->getAttributeCache($key);
+        $this->getAttributeCache($key);
 
-        $realValue = intval(round($value * 100));
+        $realValue = intval(round($value * 1000));
         if (!$this->useTransaction) {
-            $v = Cache::decrement($this->getCacheKey($key), $realValue);
-//            info("{$this->getCacheKey($key)} : $v => 减少数量 $realValue => 结果 $v");
+            Cache::decrement($this->getCacheKey($key), $realValue);
+            $modelKey = $this->getCacheKey();
+            if (!Cache::has("$modelKey:short")) {
+                SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+                Cache::put("$modelKey:short", 'wait');
+            }
         } else {
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
-//            info("{$this->getCacheKey($key)} :减少数量：{$realValue} 最新差值： {$this->tmpAttributes[$key]}");
         }
     }
 

@@ -2,22 +2,22 @@
 
 namespace LightSpeak\ModelCache;
 
-use Cache;
 use Exception;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Illuminate\Support\Facades\Cache;
 use Psr\SimpleCache\InvalidArgumentException;
-use Str;
+use Illuminate\Support\Str;
 
 class SaveCacheJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;
 
-    protected $className;
-    protected $id;
+    protected string $className;
+    protected int    $id;
 
     /**
      * Create a new job instance.
@@ -37,36 +37,39 @@ class SaveCacheJob implements ShouldQueue
      * @throws InvalidArgumentException
      * @throws Exception
      */
-    public function handle()
+    public function handle(): void
     {
-        $xxx = ModelCache::getStaticCacheKey($this->className, $this->id);
-        $lock = Cache::lock("save_model_lock:$xxx");
-//        info($xxx . 'job等待锁');
+        $modelKey = ModelCache::getStaticCacheKey($this->className, $this->id);
+        $lock = Cache::lock("save_model_lock:$modelKey");
 
-        $lock->get(function () use ($xxx) {
+        $lock->get(function () use ($modelKey) {
             $model = (new $this->className)
                 ->query()
                 ->where('id', $this->id)
                 ->first();
             if (!$model) {
-                Cache::delete($xxx);
+                Cache::forget($modelKey);
                 return;
             }
-//            info($xxx . 'job拿到锁， 在操作');
+            $changed = false;
             foreach ($model->getAttributes() as $key => $v) {
                 $cache_key = ModelCache::getStaticCacheKey($this->className, $this->id, $key);
-//                info("正在处理$key");
                 if (Cache::has($cache_key)) {
                     $value = Cache::pull($cache_key);
-                    $model->{$key} = $value / 100;
-//                    info("值为：{$model->$key}");
+                    $cacheValue = $value / 1000;
+                    if ($model->{$key} != $cacheValue) {
+                        $model->{$key} = $cacheValue;
+                        $changed = true;
+                    }
                 }
             }
-            $model->save();
-            Cache::put("$xxx:cache_version", Str::uuid()); // 更新版本
-//            info($xxx . 'job释放锁');
+            if ($changed) {
+                Cache::put("$modelKey:cache_version", Str::uuid()); // update version
+                $model->save();
+            }
+            Cache::pull("$modelKey:short");                     // delete short
+            Cache::pull("$modelKey:long");                      // delete long
         });
-        Cache::pull(ModelCache::getStaticCacheKey($this->className, $this->id));
     }
 
     public function middleware(): array

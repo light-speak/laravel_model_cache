@@ -12,24 +12,25 @@ composer require linty/laravel_model_cache
 
 ## 说明
 
-本插件全部用的Cache， Cache使用的Redis存储 功能为，对某个模型的对象的某个字段进行代理，使用Cache维护 一段时间(暂时为10分钟)内的修改全部在Cache进行, 以此优化性能
+本插件全部用的Cache， Cache使用的Redis存储 功能为，对某个模型的对象的某个字段进行代理，使用Cache维护 一段时间(暂时为10分钟)
+内的修改全部在Cache进行, 以此优化性能
 
 ## 使用
 
-1. 队列新增一个queue，名称为：model-cache ，用于维护字段
-2. 在需要使用的Model类嵌入
+- 队列新增一个queue，名称为：model-cache ，用于维护字段
+- 在需要使用的Model类嵌入
 
 ```injectablephp
     use ModelCacheTrait;
 ```
 
-3. 在原来的模型后面增加->cache()
+- 在原来的模型后面增加->cache()
 
 ```injectablephp
     $wallet = Wallet::query()->first()->cache();
 ```
 
-4. 开始正常使用吧
+- 开始正常使用吧
 
 ## 详细使用
 

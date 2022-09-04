@@ -2,19 +2,24 @@
 
 namespace LightSpeak\ModelCache;
 
-use Cache;
+use Illuminate\Database\Eloquent\Concerns\HasAttributes;
+use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @mixin Model
+ */
 trait ModelCacheTrait
 {
+    use HasAttributes;
 
-    protected $has_cache = false;
+    protected bool $has_cache = false;
 
     /**
-     * @param bool $useTransaction 是否使用事务，使用的话必须调用saveCache方法才可保存
+     * @param bool $useTransaction Whether to use transactions, if true, you must call the saveCache() method to save
      *
-     * @return mixed|CacheModel
+     * @return self|CacheModel
      */
-    public function cache(bool $useTransaction = false)
+    public function cache(bool $useTransaction = false): self|CacheModel
     {
         $this->has_cache = true;
         return ModelCache::make($this, __CLASS__, $useTransaction);
@@ -25,7 +30,7 @@ trait ModelCacheTrait
      *
      * @return mixed
      */
-    public function getAttributeFromArray($key)
+    public function getAttributeFromArray($key): mixed
     {
         if ($this->has_cache && isset($this->getAttributes()['id'])) {
             $cache_value = ModelCache::getStaticAttributeCache($key, __CLASS__, $this->getAttributes()['id']);
@@ -36,17 +41,24 @@ trait ModelCacheTrait
         return $this->getAttributes()[$key] ?? null;
     }
 
-    public static function boot()
+
+    /**
+     * Use a unique ID to search, the ID field is used by default, which can be modified
+     * Return the model with the Cache property
+     *
+     * 使用一个唯一ID进行搜索，默认使用ID字段，可修改
+     * 返回带有Cache属性的模型
+     *
+     *
+     * @param mixed $uniqueId
+     * @param string $fieldName
+     * @return self|CacheModel
+     */
+    public static function findCache(mixed $uniqueId, string $fieldName = 'id'): self|CacheModel
     {
-        self::saved(function ($model) {
-            // change version uuid to notify else instance when saved
-            foreach ($model->changes as $key => $value) {
-                Cache::delete(ModelCache::getStaticCacheKey(__CLASS__, $model->id, $key));
-            }
+        return (new self())->newQuery()
+            ->where($fieldName, $uniqueId)
+            ->first()->cache();
 
-        });
-        static::bootTraits();
     }
-
-
 }
