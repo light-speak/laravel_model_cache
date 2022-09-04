@@ -41,24 +41,11 @@ trait ModelCacheTrait
         return $this->getAttributes()[$key] ?? null;
     }
 
-
     /**
-     * Use a unique ID to search, the ID field is used by default, which can be modified
-     * Return the model with the Cache property
-     *
-     * 使用一个唯一ID进行搜索，默认使用ID字段，可修改
-     * 返回带有Cache属性的模型
-     *
-     *
-     * @param mixed $uniqueId
-     * @param string $fieldName
-     * @return self|CacheModel
+     * @return bool
      */
-    public static function findCache(mixed $uniqueId, string $fieldName = 'id'): self|CacheModel
+    public function inTransaction(): bool
     {
-        return (new self())->newQuery()
-            ->where($fieldName, $uniqueId)
-            ->first()->cache();
-
+        return false;
     }
 }

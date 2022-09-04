@@ -32,6 +32,15 @@ class CacheModel extends Model
     protected string $className;
     protected mixed  $instance;
 
+
+    /**
+     * @return bool
+     */
+    public function inTransaction(): bool
+    {
+        return $this->useTransaction;
+    }
+
     /**
      * Used to verify whether the current proxy instance is the latest version
      * This version will be wrong only if the original model is modified
@@ -213,6 +222,20 @@ class CacheModel extends Model
         } else {
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
         }
+    }
+
+
+    /**
+     * @param bool $useTransaction Whether to use transactions, if true, you must call the saveCache() method to save
+     *
+     * @return self
+     */
+    public function cache(bool $useTransaction = false): self
+    {
+        if (!$this->useTransaction && $useTransaction) {
+            $this->useTransaction = $useTransaction;
+        }
+        return $this;
     }
 
 }
