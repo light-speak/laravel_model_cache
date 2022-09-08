@@ -106,35 +106,34 @@ class CacheModel extends Model
      */
     public function getAttributeCache(string $key): int
     {
-        if ($key == 'id') {
+        if ($key === 'id') {
             return $this->instance->{$key};
         }
         $modelKey = $this->getCacheKey();
-        $lock = Cache::lock("save_model_lock:$modelKey");
-        return $lock->block(10, function () use ($key, $modelKey) {
+        return Cache::lock("save_model_lock:$modelKey")->block(10, function () use ($key, $modelKey) {
             $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
                 if (!Cache::has("$modelKey:long")) {
-                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(mt_rand(3, 24)));
+                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(random_int(3, 24)));
                     Cache::put("$modelKey:long", 'wait');
                 }
                 $value = $this->instance->{$key};
 
-                if (Cache::get("{$this->getCacheKey()}:cache_version") != $this->currentVersion) {
+                if (Cache::get("{$this->getCacheKey()}:cache_version") !== $this->currentVersion) {
                     $newest = (new $this->className)
                         ->query()
                         ->findOrFail($this->instance->id);
                     $value = $newest->{$key};
                     $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
                 }
-                return intval(($value ?? 0) * 1000); // Store in a thousand times the value
+                return (($value ?? 0) * 1000); // Store in a thousand times the value
             });
 
             // 如果当前是在事务模式且修改过值, 则返回两个的合
             if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {
                 return $this->tmpAttributes[$key] + $value;
-            } else {
-                return $value;
             }
+
+            return $value;
         });
     }
 
@@ -171,7 +170,7 @@ class CacheModel extends Model
      */
     public function __get($key)
     {
-        if (!is_numeric($this->instance->$key) || $key == 'id') {
+        if (!is_numeric($this->instance->$key) || $key === 'id') {
             return $this->instance->$key;
         }
         $v = $this->getAttributeCache($key);
@@ -190,7 +189,7 @@ class CacheModel extends Model
     public function incrementByCache(string $key, $value): void
     {
         $this->getAttributeCache($key);
-        $realValue = intval(round($value * 1000));
+        $realValue = (int)round($value * 1000);
         if (!$this->useTransaction) {
             Cache::increment($this->getCacheKey($key), $realValue);
             $modelKey = $this->getCacheKey();
@@ -212,7 +211,7 @@ class CacheModel extends Model
     {
         $this->getAttributeCache($key);
 
-        $realValue = intval(round($value * 1000));
+        $realValue = (int)round($value * 1000);
         if (!$this->useTransaction) {
             Cache::decrement($this->getCacheKey($key), $realValue);
             $modelKey = $this->getCacheKey();

@@ -4,6 +4,7 @@ namespace LightSpeak\ModelCache;
 
 use Illuminate\Database\Eloquent\Concerns\HasAttributes;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * @mixin Model
@@ -32,9 +33,17 @@ trait ModelCacheTrait
      */
     public function getAttributeFromArray($key): mixed
     {
-        if ($this->has_cache && isset($this->getAttributes()['id'])) {
+        if ($key === 'id' || !isset($this->getAttributes()['id'])) {
+            return $this->getAttributes()[$key] ?? null;
+        }
+
+        $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
+        if ($this->has_cache || Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
+            $this->has_cache = true;
+        }
+        if ($this->has_cache) {
             $cache_value = ModelCache::getStaticAttributeCache($key, __CLASS__, $this->getAttributes()['id']);
-            if ($cache_value != null) {
+            if ($cache_value !== null) {
                 return $cache_value;
             }
         }

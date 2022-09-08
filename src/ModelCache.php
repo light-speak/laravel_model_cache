@@ -47,8 +47,8 @@ class ModelCache
         $cacheKey = self::getStaticCacheKey($className, $id, $key);
         if (Cache::has($cacheKey)) {
             return Cache::get($cacheKey) / 1000;
-        } else {
-            return null;
         }
+
+        return null;
     }
 }
