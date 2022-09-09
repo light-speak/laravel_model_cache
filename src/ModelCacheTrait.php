@@ -66,7 +66,7 @@ trait ModelCacheTrait
      */
     public function save(array $options = []): void
     {
-        if (!isset($this->getAttributes()['id'])) {
+        if (isset($this->getAttributes()['id'])) {
             $changeValues = $this->getDirty();
             $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
             if (Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
