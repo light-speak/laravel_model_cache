@@ -66,14 +66,16 @@ trait ModelCacheTrait
      */
     public function save(array $options = []): void
     {
-        $changeValues = $this->getDirty();
-        $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
-        if (Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
-            foreach ($changeValues as $changeKey => $value) {
-                if (is_numeric($value)) {
-                    $fieldKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id'], $changeKey);
-                    if (Cache::has($fieldKey)) {
-                        Cache::set($fieldKey, $value * 1000);
+        if (!isset($this->getAttributes()['id'])) {
+            $changeValues = $this->getDirty();
+            $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
+            if (Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
+                foreach ($changeValues as $changeKey => $value) {
+                    if (is_numeric($value)) {
+                        $fieldKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id'], $changeKey);
+                        if (Cache::has($fieldKey)) {
+                            Cache::set($fieldKey, $value * 1000);
+                        }
                     }
                 }
             }
