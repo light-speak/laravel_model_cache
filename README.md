@@ -4,10 +4,14 @@ A caching plugin based on Laravel ORM and Redis Cache, relying on queue's model 
 
 Hold Model instance, proxy fields, use cache modification
 
+[中文文档](https://github.com/light-speak/laravel_model_cache/blob/v2.0.5/README_zh_CN.md)
+
 ## Notice！
 
 Data modification is only applicable to numeric types, and the operation is performed by 1000 times, please pay
 attention to the precision
+
+
 
 ## Install
 
