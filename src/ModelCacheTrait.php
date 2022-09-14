@@ -12,8 +12,6 @@ use Psr\SimpleCache\InvalidArgumentException;
  */
 trait ModelCacheTrait
 {
-    use HasAttributes;
-
     protected bool $has_cache = false;
 
     /**
