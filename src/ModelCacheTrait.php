@@ -12,8 +12,7 @@ use Psr\SimpleCache\InvalidArgumentException;
  */
 trait ModelCacheTrait
 {
-    protected bool  $has_cache    = false;
-    protected array $cached_field = [];
+    protected bool $has_cache = false;
 
     /**
      * @param bool $useTransaction Whether to use transactions, if true, you must call the saveCache() method to save
@@ -37,7 +36,7 @@ trait ModelCacheTrait
             return $this->getAttributes()[$key] ?? null;
         }
 
-        if (!in_array($key, $this->cached_field)) {
+        if ($this instanceof ModelCacheInterface && !in_array($key, $this->getCachedField())) {
             return $this->getAttributes()[$key] ?? null;
         }
 
