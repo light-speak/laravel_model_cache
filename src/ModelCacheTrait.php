@@ -63,10 +63,10 @@ trait ModelCacheTrait
 
     /**
      * @param array $options
-     * @return void
+     * @return bool
      * @throws InvalidArgumentException
      */
-    public function save(array $options = []): void
+    public function save(array $options = []): bool
     {
         if (isset($this->getAttributes()['id'])) {
             $changeValues = $this->getDirty();
@@ -82,7 +82,7 @@ trait ModelCacheTrait
                 }
             }
         }
-        parent::save($options);
+        return parent::save($options);
     }
 
 }
