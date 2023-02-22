@@ -41,45 +41,15 @@ class CacheModel extends Model
         return $this->useTransaction;
     }
 
-    /**
-     * Used to verify whether the current proxy instance is the latest version
-     * This version will be wrong only if the original model is modified
-     *
-     * 判断当前代理模型是否是最新数据版本
-     * 如果该模型被修改过，则版本不会一致，会自动更新数值
-     *
-     * @var string
-     */
-    protected string $currentVersion;
-
     public function __construct(mixed $model, string $className, bool $useTransaction = false)
     {
         $this->instance = $model;
         $this->className = $className;
         $this->useTransaction = $useTransaction;
-        $this->syncVersion();
 
         parent::__construct();
     }
 
-
-    /**
-     * Sync current model version
-     *
-     * 同步当前模型的版本
-     *
-     * @return void
-     */
-    public function syncVersion(): void
-    {
-        if (!Cache::has("{$this->getCacheKey()}:cache_version")) {
-            $versionUUID = Str::uuid();
-            Cache::put("{$this->getCacheKey()}:cache_version", $versionUUID);
-            $this->currentVersion = $versionUUID;
-        } else {
-            $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
-        }
-    }
 
     /**
      * Get the unique key, if the key is an empty string or null, it can represent a model, otherwise it represents a field
@@ -117,14 +87,6 @@ class CacheModel extends Model
                     Cache::put("$modelKey:long", 'wait');
                 }
                 $value = $this->instance->{$key};
-
-                if (Cache::get("{$this->getCacheKey()}:cache_version") !== $this->currentVersion) {
-                    $newest = (new $this->className)
-                        ->query()
-                        ->findOrFail($this->instance->id);
-                    $value = $newest->{$key};
-                    $this->currentVersion = Cache::get("{$this->getCacheKey()}:cache_version");
-                }
                 return (($value ?? 0) * 1000); // Store in a thousand times the value
             });
 
