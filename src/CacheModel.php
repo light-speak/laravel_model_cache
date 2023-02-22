@@ -43,8 +43,8 @@ class CacheModel extends Model
 
     public function __construct(mixed $model, string $className, bool $useTransaction = false)
     {
-        $this->instance = $model;
-        $this->className = $className;
+        $this->instance       = $model;
+        $this->className      = $className;
         $this->useTransaction = $useTransaction;
 
         parent::__construct();
@@ -117,7 +117,7 @@ class CacheModel extends Model
             Cache::increment($this->getCacheKey($key), $value);
         }
         $this->tmpAttributes = [];
-        $modelKey = $this->getCacheKey();
+        $modelKey            = $this->getCacheKey();
         if (!Cache::has("$modelKey:short")) {
             SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
             Cache::put("$modelKey:short", 'wait');
