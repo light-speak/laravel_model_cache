@@ -30,7 +30,8 @@ class CacheModel extends Model
     protected bool  $useTransaction;
 
     protected string $className;
-    protected mixed  $instance;
+    /** @var self $instance */
+    protected mixed $instance;
 
 
     /**
@@ -86,8 +87,8 @@ class CacheModel extends Model
                     SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(random_int(3, 24)));
                     Cache::put("$modelKey:long", 'wait');
                 }
-                $value = $this->instance->{$key};
-                return (($value ?? 0) * 1000); // Store in a thousand times the value
+                $value = $this->instance->refresh()->{$key};
+                return $value * 1000; // Store in a thousand times the value
             });
 
             // 如果当前是在事务模式且修改过值, 则返回两个的合
@@ -119,7 +120,7 @@ class CacheModel extends Model
         $this->tmpAttributes = [];
         $modelKey            = $this->getCacheKey();
         if (!Cache::has("$modelKey:short")) {
-            SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+            SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(30));
             Cache::put("$modelKey:short", 'wait');
         }
     }
