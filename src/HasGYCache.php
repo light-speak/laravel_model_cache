@@ -2,15 +2,14 @@
 
 namespace LightSpeak\ModelCache;
 
-use Illuminate\Database\Eloquent\Concerns\HasAttributes;
+use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
-use Psr\SimpleCache\InvalidArgumentException;
 
 /**
  * @mixin Model
  */
-trait ModelCacheTrait
+trait HasGYCache
 {
     protected bool $has_cache = false;
 
@@ -64,25 +63,11 @@ trait ModelCacheTrait
     /**
      * @param array $options
      * @return bool
-     * @throws InvalidArgumentException
+     * @throws Exception
      */
     public function save(array $options = []): bool
     {
-        if (isset($this->getAttributes()['id'])) {
-            $changeValues = $this->getDirty();
-            $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
-            if (Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
-                foreach ($changeValues as $changeKey => $value) {
-                    if (is_numeric($value)) {
-                        $fieldKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id'], $changeKey);
-                        if (Cache::has($fieldKey)) {
-                            Cache::set($fieldKey, $value * 1000);
-                        }
-                    }
-                }
-            }
-        }
-        return parent::save($options);
+        throw new Exception('Do not allow cached models to be saved individually');
     }
 
 }

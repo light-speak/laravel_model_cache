@@ -4,17 +4,18 @@ namespace LightSpeak\ModelCache;
 
 use Exception;
 use Illuminate\Bus\Queueable;
+use Illuminate\Cache\HasCacheLock;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
-use Psr\SimpleCache\InvalidArgumentException;
 use Illuminate\Support\Str;
+use Psr\SimpleCache\InvalidArgumentException;
 
 class SaveCacheJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable;
+    use Dispatchable, InteractsWithQueue, Queueable, HasCacheLock;
 
     protected string $className;
     protected int    $id;
@@ -25,9 +26,9 @@ class SaveCacheJob implements ShouldQueue
      */
     public function __construct(string $className, $id)
     {
-        $this->queue = 'model-cache';
+        $this->queue     = 'model-cache';
         $this->className = $className;
-        $this->id = $id;
+        $this->id        = $id;
     }
 
     /**
@@ -40,7 +41,7 @@ class SaveCacheJob implements ShouldQueue
     public function handle(): void
     {
         $modelKey = ModelCache::getStaticCacheKey($this->className, $this->id);
-        $lock = Cache::lock("save_model_lock:$modelKey");
+        $lock     = $this->lock("save_model_lock:$modelKey", 10, $modelKey);
 
         $lock->get(function () use ($modelKey) {
             $model = (new $this->className)
@@ -55,11 +56,11 @@ class SaveCacheJob implements ShouldQueue
             foreach ($model->getAttributes() as $key => $v) {
                 $cache_key = ModelCache::getStaticCacheKey($this->className, $this->id, $key);
                 if (Cache::has($cache_key)) {
-                    $value = Cache::pull($cache_key);
-                    $cacheValue = $value / 1000;
+                    $value      = Cache::pull($cache_key);
+                    $cacheValue = (int)bcdiv($value, 1000);
                     if ($model->{$key} != $cacheValue) {
                         $model->{$key} = $cacheValue;
-                        $changed = true;
+                        $changed       = true;
                     }
                 }
             }

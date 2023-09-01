@@ -17,6 +17,7 @@
   ],
   "require": {
     "php": ">=8.0",
-    "laravel/framework": "9.*|10.*"
+    "laravel/framework": "9.*|10.*",
+    "ext-bcmath": "*"
   }
 }

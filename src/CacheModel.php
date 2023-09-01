@@ -2,10 +2,10 @@
 
 namespace LightSpeak\ModelCache;
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Database\Eloquent\Model;
 use Exception;
-use Illuminate\Support\Str;
+use Illuminate\Cache\HasCacheLock;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -13,6 +13,9 @@ use Throwable;
  */
 class CacheModel extends Model
 {
+
+    use HasCacheLock;
+
     /**
      * If useTransaction = True
      *
@@ -33,15 +36,6 @@ class CacheModel extends Model
     /** @var self $instance */
     protected mixed $instance;
 
-
-    /**
-     * @return bool
-     */
-    public function inTransaction(): bool
-    {
-        return $this->useTransaction;
-    }
-
     public function __construct(mixed $model, string $className, bool $useTransaction = false)
     {
         $this->instance       = $model;
@@ -51,18 +45,37 @@ class CacheModel extends Model
         parent::__construct();
     }
 
+    /**
+     * @return bool
+     */
+    public function inTransaction(): bool
+    {
+        return $this->useTransaction;
+    }
+
+    public function save(array $options = []): void
+    {
+    }
 
     /**
-     * Get the unique key, if the key is an empty string or null, it can represent a model, otherwise it represents a field
+     * If using a transaction, use this method to save
      *
-     * 获取一个唯一Key，$key为空或者空字符时，用于代表Model，$key为字段名称则代表字段
+     * 如果使用事务，需要用该方法进行保存
      *
-     * @param string $key
-     * @return string
+     * @throws Exception
      */
-    public function getCacheKey(string $key = ''): string
+    public function saveCache(): void
     {
-        return ModelCache::getStaticCacheKey($this->className, $this->instance->id, $key);
+        foreach ($this->tmpAttributes as $key => $value) {
+            $this->getAttributeCache($key);  // Avoid having no value in the cache and update the cached version
+            Cache::increment($this->getCacheKey($key), $value);
+        }
+        $this->tmpAttributes = [];
+        $modelKey            = $this->getCacheKey();
+        if (!Cache::has("$modelKey:short")) {
+            SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
+            Cache::put("$modelKey:short", 'wait');
+        }
     }
 
     /**
@@ -81,14 +94,15 @@ class CacheModel extends Model
             return $this->instance->{$key};
         }
         $modelKey = $this->getCacheKey();
-        return Cache::lock("save_model_lock:$modelKey")->block(10, function () use ($key, $modelKey) {
+        $lock     = $this->lock("save_model_lock:$modelKey", 10, $modelKey);
+        return $lock->get(function () use ($key, $modelKey) {
             $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
                 if (!Cache::has("$modelKey:long")) {
                     SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(random_int(3, 24)));
                     Cache::put("$modelKey:long", 'wait');
                 }
                 $value = $this->instance->refresh()->{$key};
-                return $value * 1000; // Store in a thousand times the value
+                return bcmul($value, 1000); // Store in a thousand times the value
             });
 
             // 如果当前是在事务模式且修改过值, 则返回两个的合
@@ -100,29 +114,17 @@ class CacheModel extends Model
         });
     }
 
-    public function save(array $options = []): void
-    {
-    }
-
     /**
-     * If using a transaction, use this method to save
+     * Get the unique key, if the key is an empty string or null, it can represent a model, otherwise it represents a field
      *
-     * 如果使用事务，需要用该方法进行保存
+     * 获取一个唯一Key，$key为空或者空字符时，用于代表Model，$key为字段名称则代表字段
      *
-     * @throws Exception
+     * @param string $key
+     * @return string
      */
-    public function saveCache()
+    public function getCacheKey(string $key = ''): string
     {
-        foreach ($this->tmpAttributes as $key => $value) {
-            $this->getAttributeCache($key);  // Avoid having no value in the cache and update the cached version
-            Cache::increment($this->getCacheKey($key), $value);
-        }
-        $this->tmpAttributes = [];
-        $modelKey            = $this->getCacheKey();
-        if (!Cache::has("$modelKey:short")) {
-            SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(30));
-            Cache::put("$modelKey:short", 'wait');
-        }
+        return ModelCache::getStaticCacheKey($this->className, $this->instance->id, $key);
     }
 
     /**
@@ -137,7 +139,7 @@ class CacheModel extends Model
             return $this->instance->$key;
         }
         $v = $this->getAttributeCache($key);
-        return (float)$v / 1000;
+        return (int)bcdiv($v, 1000);
     }
 
     public function __set($key, $value)
@@ -152,7 +154,7 @@ class CacheModel extends Model
     public function incrementByCache(string $key, $value): void
     {
         $this->getAttributeCache($key);
-        $realValue = (int)round($value * 1000);
+        $realValue = (int)bcmul($value, 1000);
         if (!$this->useTransaction) {
             Cache::increment($this->getCacheKey($key), $realValue);
             $modelKey = $this->getCacheKey();
@@ -174,7 +176,7 @@ class CacheModel extends Model
     {
         $this->getAttributeCache($key);
 
-        $realValue = (int)round($value * 1000);
+        $realValue = (int)bcmul($value, 1000);
         if (!$this->useTransaction) {
             Cache::decrement($this->getCacheKey($key), $realValue);
             $modelKey = $this->getCacheKey();
