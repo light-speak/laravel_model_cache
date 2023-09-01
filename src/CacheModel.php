@@ -3,7 +3,6 @@
 namespace LightSpeak\ModelCache;
 
 use Exception;
-use Illuminate\Cache\HasCacheLock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -13,8 +12,6 @@ use Throwable;
  */
 class CacheModel extends Model
 {
-
-    use HasCacheLock;
 
     /**
      * If useTransaction = True
@@ -94,8 +91,7 @@ class CacheModel extends Model
             return $this->instance->{$key};
         }
         $modelKey = $this->getCacheKey();
-        $lock     = $this->lock("save_model_lock:$modelKey", 10, $modelKey);
-        return $lock->get(function () use ($key, $modelKey) {
+        return Cache::lock("save_model_lock:$modelKey")->block(10, function () use ($key, $modelKey) {
             $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
                 if (!Cache::has("$modelKey:long")) {
                     SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(random_int(3, 24)));

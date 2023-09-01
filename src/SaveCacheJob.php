@@ -4,7 +4,6 @@ namespace LightSpeak\ModelCache;
 
 use Exception;
 use Illuminate\Bus\Queueable;
-use Illuminate\Cache\HasCacheLock;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -15,7 +14,7 @@ use Psr\SimpleCache\InvalidArgumentException;
 
 class SaveCacheJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, HasCacheLock;
+    use Dispatchable, InteractsWithQueue, Queueable;
 
     protected string $className;
     protected int    $id;
@@ -41,7 +40,7 @@ class SaveCacheJob implements ShouldQueue
     public function handle(): void
     {
         $modelKey = ModelCache::getStaticCacheKey($this->className, $this->id);
-        $lock     = $this->lock("save_model_lock:$modelKey", 10, $modelKey);
+        $lock     = Cache::lock("save_model_lock:$modelKey", 10, $modelKey);
 
         $lock->get(function () use ($modelKey) {
             $model = (new $this->className)
