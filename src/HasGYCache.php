@@ -67,7 +67,22 @@ trait HasGYCache
      */
     public function save(array $options = []): bool
     {
-        throw new Exception('Do not allow cached models to be saved individually');
+        if (isset($this->getAttributes()['id'])) {
+            $changeValues = $this->getDirty();
+            $modelKey     = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
+            if (Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
+                foreach ($changeValues as $changeKey => $value) {
+                    if (is_numeric($value)) {
+                        $fieldKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id'], $changeKey);
+                        if (Cache::has($fieldKey)) {
+                            Cache::put($fieldKey, bcmul($value, 1000));
+                        }
+                    }
+                }
+            }
+        }
+        return parent::save($options);
+//        throw new Exception('Do not allow cached models to be saved individually');
     }
 
 }
