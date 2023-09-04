@@ -93,7 +93,7 @@ class CacheModel extends Model
         $modelKey = $this->getCacheKey();
         try {
             $lock   = Cache::lock("save_model_lock:$modelKey", 10);
-            return $lock->block(10, function () use ($key, $modelKey) {
+            $result = $lock->block(10, function () use ($key, $modelKey) {
                 $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
                     $value = $this->instance->refresh()->{$key};
                     return bcmul($value, 1000); // Store in a thousand times the value
@@ -106,6 +106,7 @@ class CacheModel extends Model
 
                 return $value;
             });
+            return $result;
         } catch (Exception $e) {
             throw new Exception('服务器繁忙');
         }
@@ -156,12 +157,12 @@ class CacheModel extends Model
         $realValue = (int)bcmul($value, 1000);
 
         if (!$this->useTransaction) {
-            if ($max) {
+            if (!is_null($max)) {
                 $lock = Cache::lock("{$this->getCacheKey($key)}:limit:lock", 3);
                 $lock->block(3, function () use ($key, $realValue, $max) {
                     $currentValue = $this->getAttributeCache($key);
                     $resultValue  = $currentValue + $realValue;
-//                    info("计算的时候发现当前值： $currentValue 如果加完就是 {$resultValue}");
+                    info("计算的时候发现当前值： $currentValue 如果加完就是 {$resultValue}");
                     if ((int)bcmul($max, 1000) < $resultValue) {
                         throw new Exception("计算结果预期为：{$resultValue} (1000倍), 达到设定的数值上限：{$max}");
                     }
@@ -172,7 +173,7 @@ class CacheModel extends Model
             }
             $this->setShortLockJob();
         } else {
-            if ($max) {
+            if (!is_null($max)) {
                 throw new Exception("不允许这么使用");
             }
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) + $realValue;
@@ -206,12 +207,12 @@ class CacheModel extends Model
         $realValue = (int)bcmul($value, 1000);
 
         if (!$this->useTransaction) {
-            if ($min) {
+            if (!is_null($min)) {
                 $lock = Cache::lock("{$this->getCacheKey($key)}:limit:lock", 3);
                 $lock->block(3, function () use ($key, $realValue, $min) {
                     $currentValue = $this->getAttributeCache($key);
                     $resultValue  = $currentValue - $realValue;
-//                    info("计算的时候发现当前值： $currentValue 如果减完就是 {$resultValue}");
+                    info("计算的时候发现当前值： $currentValue 如果减完就是 {$resultValue}");
                     if ((int)bcmul($min, 1000) > $resultValue) {
                         throw new Exception("计算结果预期为：{$resultValue} (1000倍), 达到设定的数值下限：{$min}");
                     }
@@ -222,7 +223,7 @@ class CacheModel extends Model
             }
             $this->setShortLockJob();
         } else {
-            if ($min) {
+            if (!is_null($min)) {
                 throw new Exception("不允许这么使用");
             }
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
