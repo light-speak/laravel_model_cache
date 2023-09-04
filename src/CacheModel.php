@@ -5,7 +5,6 @@ namespace LightSpeak\ModelCache;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
-use Throwable;
 
 /**
  * @mixin Model
@@ -84,6 +83,7 @@ class CacheModel extends Model
      *
      * @param string $key
      * @return int
+     * @throws Exception
      */
     public function getAttributeCache(string $key): int
     {
@@ -91,23 +91,24 @@ class CacheModel extends Model
             return $this->instance->{$key};
         }
         $modelKey = $this->getCacheKey();
-        return Cache::lock("save_model_lock:$modelKey")->block(10, function () use ($key, $modelKey) {
-            $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
-                if (!Cache::has("$modelKey:long")) {
-                    SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addHours(random_int(3, 24)));
-                    Cache::put("$modelKey:long", 'wait');
+        try {
+            $lock   = Cache::lock("save_model_lock:$modelKey", 10);
+            return $lock->block(10, function () use ($key, $modelKey) {
+                $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
+                    $value = $this->instance->refresh()->{$key};
+                    return bcmul($value, 1000); // Store in a thousand times the value
+                });
+
+                // 如果当前是在事务模式且修改过值, 则返回两个的合
+                if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {
+                    return $this->tmpAttributes[$key] + $value;
                 }
-                $value = $this->instance->refresh()->{$key};
-                return bcmul($value, 1000); // Store in a thousand times the value
+
+                return $value;
             });
-
-            // 如果当前是在事务模式且修改过值, 则返回两个的合
-            if ($this->useTransaction && array_key_exists($key, $this->tmpAttributes)) {
-                return $this->tmpAttributes[$key] + $value;
-            }
-
-            return $value;
-        });
+        } catch (Exception $e) {
+            throw new Exception('服务器繁忙');
+        }
     }
 
     /**
@@ -123,11 +124,12 @@ class CacheModel extends Model
         return ModelCache::getStaticCacheKey($this->className, $this->instance->id, $key);
     }
 
+
     /**
      * @param $key
      *
      * @return float
-     * @throws Throwable
+     * @throws Exception
      */
     public function __get($key)
     {
@@ -145,46 +147,87 @@ class CacheModel extends Model
     /**
      * @param string $key
      * @param $value
+     * @param int|null $max
      * @return void
+     * @throws Exception
      */
-    public function incrementByCache(string $key, $value): void
+    public function incrementByCache(string $key, $value, ?int $max = null): void
     {
-        $this->getAttributeCache($key);
         $realValue = (int)bcmul($value, 1000);
+
         if (!$this->useTransaction) {
-            Cache::increment($this->getCacheKey($key), $realValue);
-            $modelKey = $this->getCacheKey();
-            if (!Cache::has("$modelKey:short")) {
-                SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
-                Cache::put("$modelKey:short", 'wait');
+            if ($max) {
+                $lock = Cache::lock("{$this->getCacheKey($key)}:limit:lock", 3);
+                $lock->block(3, function () use ($key, $realValue, $max) {
+                    $currentValue = $this->getAttributeCache($key);
+                    $resultValue  = $currentValue + $realValue;
+//                    info("计算的时候发现当前值： $currentValue 如果加完就是 {$resultValue}");
+                    if ((int)bcmul($max, 1000) < $resultValue) {
+                        throw new Exception("计算结果预期为：{$resultValue} (1000倍), 达到设定的数值上限：{$max}");
+                    }
+                    Cache::increment($this->getCacheKey($key), $realValue);
+                });
+            } else {
+                Cache::increment($this->getCacheKey($key), $realValue);
             }
+            $this->setShortLockJob();
         } else {
+            if ($max) {
+                throw new Exception("不允许这么使用");
+            }
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) + $realValue;
         }
     }
 
     /**
-     * @param string $key
-     * @param $value
      * @return void
      */
-    public function decrementByCache(string $key, $value): void
+    public function setShortLockJob()
     {
-        $this->getAttributeCache($key);
-
-        $realValue = (int)bcmul($value, 1000);
-        if (!$this->useTransaction) {
-            Cache::decrement($this->getCacheKey($key), $realValue);
-            $modelKey = $this->getCacheKey();
+        $modelKey = $this->getCacheKey();
+        $lock     = Cache::lock("$modelKey:short:lock", 5);
+        $lock->block(3, function () use ($modelKey) {
             if (!Cache::has("$modelKey:short")) {
-                SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(15));
                 Cache::put("$modelKey:short", 'wait');
+                SaveCacheJob::dispatch($this->className, $this->instance->id)->delay(now()->addSeconds(30));
             }
+        });
+    }
+
+    /**
+     * @param string $key
+     * @param $value
+     * @param int|null $min
+     * @return void
+     * @throws Exception
+     */
+    public function decrementByCache(string $key, $value, ?int $min = null): void
+    {
+        $realValue = (int)bcmul($value, 1000);
+
+        if (!$this->useTransaction) {
+            if ($min) {
+                $lock = Cache::lock("{$this->getCacheKey($key)}:limit:lock", 3);
+                $lock->block(3, function () use ($key, $realValue, $min) {
+                    $currentValue = $this->getAttributeCache($key);
+                    $resultValue  = $currentValue - $realValue;
+//                    info("计算的时候发现当前值： $currentValue 如果减完就是 {$resultValue}");
+                    if ((int)bcmul($min, 1000) > $resultValue) {
+                        throw new Exception("计算结果预期为：{$resultValue} (1000倍), 达到设定的数值下限：{$min}");
+                    }
+                    Cache::decrement($this->getCacheKey($key), $realValue);
+                });
+            } else {
+                Cache::decrement($this->getCacheKey($key), $realValue);
+            }
+            $this->setShortLockJob();
         } else {
+            if ($min) {
+                throw new Exception("不允许这么使用");
+            }
             $this->tmpAttributes[$key] = ($this->tmpAttributes[$key] ?? 0) - $realValue;
         }
     }
-
 
     /**
      * @param bool $useTransaction Whether to use transactions, if true, you must call the saveCache() method to save
