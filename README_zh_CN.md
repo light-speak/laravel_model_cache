@@ -28,7 +28,7 @@ composer require light-speak/laravel_model_cache
 - 在需要使用的Model类嵌入
 
 ```injectablephp
-    use ModelCacheTrait;
+    use useGYCache;
 ```
 
 - 在原来的模型后面调用cache()方法
