@@ -40,10 +40,10 @@ trait HasGYCache
         }
 
         $modelKey = ModelCache::getStaticCacheKey(__CLASS__, $this->getAttributes()['id']);
-        if ($this->has_cache || Cache::has("$modelKey:short") || Cache::has("$modelKey:long")) {
+        if ($this->has_cache || Cache::has("$modelKey:short")) {
             $this->has_cache = true;
         }
-        if ($this->has_cache) {
+        if ($this->has_cache && is_numeric($this->getAttributes()[$key])) {
             $cache_value = ModelCache::getStaticAttributeCache($key, __CLASS__, $this->getAttributes()['id']);
             if ($cache_value !== null) {
                 return $cache_value;

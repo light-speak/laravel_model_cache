@@ -92,8 +92,8 @@ class CacheModel extends Model
         }
         $modelKey = $this->getCacheKey();
         try {
-            $lock   = Cache::lock("save_model_lock:$modelKey", 10);
-            $result = $lock->block(10, function () use ($key, $modelKey) {
+            $lock = Cache::lock("save_model_lock:$modelKey", 10);
+            return $lock->block(10, function () use ($key, $modelKey) {
                 $value = Cache::rememberForever($this->getCacheKey($key), function () use ($key, $modelKey) {
                     $value = $this->instance->refresh()->{$key};
                     return bcmul($value, 1000); // Store in a thousand times the value
@@ -106,7 +106,6 @@ class CacheModel extends Model
 
                 return $value;
             });
-            return $result;
         } catch (Exception $e) {
             throw new Exception('服务器繁忙');
         }
@@ -184,7 +183,7 @@ class CacheModel extends Model
     /**
      * @return void
      */
-    public function setShortLockJob()
+    public function setShortLockJob(): void
     {
         $modelKey = $this->getCacheKey();
         $lock     = Cache::lock("$modelKey:short:lock", 5);
@@ -245,6 +244,13 @@ class CacheModel extends Model
         return $this;
     }
 
+    /**
+     * @return void
+     */
+    public function flushCache(): void
+    {
+        SaveCacheJob::dispatchSync($this->className, $this->instance->id);
+    }
 }
 
 
