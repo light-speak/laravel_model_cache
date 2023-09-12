@@ -34,7 +34,7 @@ All internal modifications are made in the Cache to optimize performance
 - Embed in the Model class that needs to be used
 
 ```injectablephp
-    use ModelCacheTrait;
+    use useGYCache;
 ````
 
 - call the cache() method after the original model

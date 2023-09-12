@@ -169,6 +169,7 @@ class CacheModel extends Model
                     Cache::increment($this->getCacheKey($key), $realValue);
                 });
             } else {
+                $this->getAttributeCache($key);
                 Cache::increment($this->getCacheKey($key), $realValue);
             }
             $this->setShortLockJob();
@@ -219,6 +220,7 @@ class CacheModel extends Model
                     Cache::decrement($this->getCacheKey($key), $realValue);
                 });
             } else {
+                $this->getAttributeCache($key);
                 Cache::decrement($this->getCacheKey($key), $realValue);
             }
             $this->setShortLockJob();
