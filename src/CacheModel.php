@@ -137,7 +137,7 @@ class CacheModel extends Model
             return $this->instance->$key;
         }
         $v = $this->getAttributeCache($key);
-        return (int)bcdiv($v, 1000);
+        return (int)bcdiv($v, 1000, 5);
     }
 
     public function __set($key, $value)
