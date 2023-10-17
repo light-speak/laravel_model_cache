@@ -30,7 +30,7 @@ class ModelCache
     {
         $cacheKey = self::getStaticCacheKey($className, $id, $key);
         if (Cache::has($cacheKey)) {
-            return (float)bcdiv(Cache::get($cacheKey), 1000, 5);
+            return (float)bcdiv(Cache::get($cacheKey), 1000, 2);
         }
 
         return null;

@@ -59,7 +59,7 @@ class SaveCacheJob implements ShouldQueue
                         $cache_key = ModelCache::getStaticCacheKey($this->className, $this->id, $key);
                         if (Cache::has($cache_key)) {
                             $value      = Cache::pull($cache_key);
-                            $cacheValue = (float)bcdiv($value, 1000, 5);
+                            $cacheValue = (float)bcdiv($value, 1000, 2);
 //                    info("缓存Key: $cache_key ,值: $cacheValue 模型值: {$model->{$key}}");
                             if ($model->{$key} != $cacheValue) {
                                 $model->{$key} = $cacheValue;
@@ -81,7 +81,7 @@ class SaveCacheJob implements ShouldQueue
                 }
             });
         } catch (LockTimeoutException $exception) {
-            $this->release(now()->addSeconds(30));
+            SaveCacheJob::dispatch($this->className, $this->id)->delay(now()->addSeconds(30));
         }
     }
 
